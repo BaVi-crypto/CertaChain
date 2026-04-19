@@ -1,24 +1,19 @@
 const crypto = require('crypto');
 const EC = require('elliptic').ec;
 
-const ec = new EC('secp256k1'); // isti algoritam kao Bitcoin
+const ec = new EC('secp256k1');
 
 class Wallet {
   constructor() {
     this.keyPair = ec.genKeyPair();
     this.privateKey = this.keyPair.getPrivate('hex');
-    this.publicKey = this.keyPair.getPublic('hex');
+    this.publicKey = this.keyPair.getPublic().encode('hex', false); // fix
     this.address = this.generateAddress();
   }
 
   generateAddress() {
-    return crypto
-      .createHash('sha256')
-      .update(this.publicKey)
-      .digest('hex')
-      .substring(0, 40); // 40 znakova kao Ethereum adresa
-  }
-
+  return this.publicKey; // adresa = public key direktno
+}
   sign(data) {
     const hash = crypto
       .createHash('sha256')
@@ -32,7 +27,7 @@ class Wallet {
       .createHash('sha256')
       .update(JSON.stringify(data))
       .digest('hex');
-    const key = ec.keyFromPublic(publicKey, 'hex');
+    const key = ec.keyFromPublic(publicKey, 'hex'); // sad radi ispravno
     return key.verify(hash, signature);
   }
 }
