@@ -1,0 +1,19 @@
+{
+  "name": "cetrachain",
+  "version": "1.0.0",
+  "description": "CetraChain — Blockchaih system",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "jest",
+    "start": "node src/index.js"
+  },
+  "jest": {
+    "testEnvironment": "node"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0"
+  },
+  "dependencies": {
+    "elliptic": "^6.6.1"
+  }
+}
