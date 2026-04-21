@@ -86,14 +86,17 @@ app.post('/transaction', (req, res) => {
 
 // POST /mine — rudari novi blok
 app.post('/mine', (req, res) => {
-  const block = cetraChain.minePendingTransactions(minerWallet.address);
+  const minerAddress = (req.body && req.body.minerAddress) 
+    ? req.body.minerAddress 
+    : minerWallet.address;
+    
+  const block = cetraChain.minePendingTransactions(minerAddress);
   res.json({
     message: 'Block mined!',
     block,
-    minerBalance: cetraChain.getBalance(minerWallet.address)
+    minerBalance: cetraChain.getBalance(minerAddress)
   });
 });
-
 // GET /validate — provjeri je li lanac valjan
 app.get('/validate', (req, res) => {
   res.json({
