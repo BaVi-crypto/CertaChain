@@ -4,41 +4,36 @@ const helmet = require('helmet');
 const Blockchain = require('../core/Blockchain');
 const Transaction = require('../core/Transaction');
 const Wallet = require('../crypto/Wallet');
+const P2PServer = require('../p2p/P2PServer');
 
 const app = express();
-const PORT = 3000;
+const HTTP_PORT = process.env.HTTP_PORT || 3000;
+const P2P_PORT = process.env.P2P_PORT || 6001;
+const PEERS = process.env.PEERS ? process.env.PEERS.split(',') : [];
 
-// Middleware
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// CetraChain instance
 const cetraChain = new Blockchain();
 const minerWallet = new Wallet();
+const p2pServer = new P2PServer(cetraChain);
 
-console.log('Miner address:', minerWallet.address.substring(0, 20) + '...');
+console.log(`Miner address: ${minerWallet.address.substring(0, 20)}...`);
 
 // ── ROUTES ──────────────────────────────────────────
 
-// GET /chain — cijeli blockchain
 app.get('/chain', (req, res) => {
-  res.json({
-    length: cetraChain.chain.length,
-    chain: cetraChain.chain
-  });
+  res.json({ length: cetraChain.chain.length, chain: cetraChain.chain });
 });
 
-// GET /balance/:address — stanje walletа
 app.get('/balance/:address', (req, res) => {
-  const balance = cetraChain.getBalance(req.params.address);
   res.json({
     address: req.params.address,
-    balance
+    balance: cetraChain.getBalance(req.params.address)
   });
 });
 
-// GET /pending — pending transakcije
 app.get('/pending', (req, res) => {
   res.json({
     count: cetraChain.pendingTransactions.length,
@@ -46,7 +41,14 @@ app.get('/pending', (req, res) => {
   });
 });
 
-// POST /wallet — napravi novi wallet
+app.get('/peers', (req, res) => {
+  res.json({ count: p2pServer.getPeerCount() });
+});
+
+app.get('/validate', (req, res) => {
+  res.json({ valid: cetraChain.isChainValid() });
+});
+
 app.post('/wallet', (req, res) => {
   const wallet = new Wallet();
   res.json({
@@ -56,18 +58,14 @@ app.post('/wallet', (req, res) => {
   });
 });
 
-// POST /transaction — pošalji CetraCoins
 app.post('/transaction', (req, res) => {
   const { fromAddress, toAddress, amount, privateKey } = req.body;
-
   if (!fromAddress || !toAddress || !amount || !privateKey) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
-
   try {
     const EC = require('elliptic').ec;
     const ec = new EC('secp256k1');
-
     const wallet = new Wallet();
     wallet.keyPair = ec.keyFromPrivate(privateKey, 'hex');
     wallet.privateKey = privateKey;
@@ -77,6 +75,7 @@ app.post('/transaction', (req, res) => {
     const tx = new Transaction(fromAddress, toAddress, amount);
     tx.sign(wallet);
     cetraChain.addTransaction(tx);
+    p2pServer.broadcastTransaction(tx);
 
     res.json({ message: 'Transaction added!', transaction: tx });
   } catch (err) {
@@ -84,35 +83,31 @@ app.post('/transaction', (req, res) => {
   }
 });
 
-// POST /mine — rudari novi blok
 app.post('/mine', (req, res) => {
-  const minerAddress = (req.body && req.body.minerAddress) 
-    ? req.body.minerAddress 
+  const minerAddress = (req.body && req.body.minerAddress)
+    ? req.body.minerAddress
     : minerWallet.address;
-    
   const block = cetraChain.minePendingTransactions(minerAddress);
+  p2pServer.broadcastChain();
   res.json({
     message: 'Block mined!',
     block,
     minerBalance: cetraChain.getBalance(minerAddress)
   });
 });
-// GET /validate — provjeri je li lanac valjan
-app.get('/validate', (req, res) => {
-  res.json({
-    valid: cetraChain.isChainValid()
-  });
+
+app.post('/peers/connect', (req, res) => {
+  const { peer } = req.body;
+  if (!peer) return res.status(400).json({ error: 'Peer address required' });
+  p2pServer.connectToPeer(peer);
+  res.json({ message: `Connecting to peer: ${peer}` });
 });
 
 // ── START ────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`CetraChain node running on http://localhost:${PORT}`);
-  console.log(`Endpoints:`);
-  console.log(`  GET  /chain`);
-  console.log(`  GET  /balance/:address`);
-  console.log(`  GET  /pending`);
-  console.log(`  GET  /validate`);
-  console.log(`  POST /wallet`);
-  console.log(`  POST /transaction`);
-  console.log(`  POST /mine`);
+app.listen(HTTP_PORT, () => {
+  console.log(`CetraChain node running on http://localhost:${HTTP_PORT}`);
 });
+
+p2pServer.listen(P2P_PORT);
+
+PEERS.forEach(peer => p2pServer.connectToPeer(peer));
